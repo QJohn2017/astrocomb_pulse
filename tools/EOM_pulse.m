@@ -13,5 +13,5 @@ N_PM = 2;
 E_IM = (1 + exp(1i*phi_dc).*exp(1i.*(pi*vpi_ratio).*cos(omega_m.*t))).^N_IM;    %Use 1 - exp... to center pulse
 E_PM = (exp(1i.*(pi*Vapp/V_pi).*cos(omega_m.*t))).^N_PM;
 u = E_IM.*E_PM;
-end
+end % End function
 

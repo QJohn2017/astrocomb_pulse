@@ -14,7 +14,6 @@ close all
 %load seaborn_colors.mat
 current_directory = pwd;
 addpath(fullfile(current_directory, 'tools'));   % path for Tools Directory
-%addpath ('C:\Users\Alex\Documents\MATLAB\Astro_EOM_comb\Pulse Simulation\ssprop-3.0.1\tools')   % path for Tools Directory
 % Don't need to add that path if this file, ssprop.m and EOM_pulse.m are on
 % the same path already
 %% Initialize Parameters
@@ -39,7 +38,7 @@ save('pulse_globalvars.mat', ...
 
 
 %% First Step: EOM Comb and SMF
-z = 180;    % Total propogation distance, unit m
+z = 175;    % Total propogation distance, unit m
 betap = 1.0*[0, 0, -0.0217, 5.0308e-05];     % Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
 alpha = 0.18/1000/4.34;     % Loss coefficient, unit m-1. Leading number is loss in dB/km
 ave_power = 0.001;      % Avg Power, W
@@ -111,19 +110,18 @@ hnlf_fit = fit(t(fit_mask), hnlf_power_t(fit_mask, end), 'gauss1'); %Fit of Inte
 
 %figure; plot(t, edfa_power_t(:, end), t, hnlf_power_t(:, end));
 
-%% Fourth Step: Pulse Compressor
+%% Fourth Step: Single Mode Fiber
 
 z = 1.5;
-betap = [0, 0, -0.0217, 5.0308e-05];     % Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
-alpha = 0.18/1000/4.34;     % Loss coefficient, unit m-1. Leading number is loss in dB/km
-gamma = 0.78*1E-3;	%Nonlinaer Coefficient of material Taken from https://ieeexplore.ieee.org/document/7764544
+alpha = 0.18/1000/4.34;  % Loss coefficient, unit m-1. Leading number is loss in dB/km
+betap = [0, 0, -0.0217, 5.0308e-05];  % Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
+gamma = 0.78*1E-3;  %Nonlinaer Coefficient of material Taken from https://ieeexplore.ieee.org/document/7764544
 %Energy = ave_power(2)/uWave_freq*1E12; % Pulse Energy, pJ
 %peak_power = (Energy*1E-12)/(2*hnlf_fit.c1*1E-12);   %Peak power in J(?)
 u_ini = hnlf_t(:, end); %Initial pulse from previous pulse
 
-
 tic;
-disp('Propagating through Compressor');
+disp('Propagating through SMF');
 [comp_t, comp_f, comp_power_f, comp_power_t, comp_phi_t, comp_phi_f] = ...
     prop_pulse(u_ini, alpha, betap, gamma, Energy, z);
 toc;
@@ -134,6 +132,10 @@ comp_phi_t = comp_phi_t(:, end); comp_phi_f = comp_phi_f(:, end);
 comp_fit = fit(t(fit_mask), comp_power_t(fit_mask, end), 'gauss1'); %Fit of Intenisty FWHM
 fprintf('Final Pulse Width %.2f ps\n', 2*comp_fit.c1);
 
+%% Fifth Step: Optional Grating Compression
+
+% tic;
+% disp('Propagating through Compressor');
 % beta_grating = -0.6; %Dispersion of Grating Compressor in ps^2 (note 1 ps^2 = 10^6 fs^2). Should be negative
 % phi = exp(-1i*beta_grating.*(f-v0).^2);	%Phase added by grating compressor
 % E_ini = 0.8*hnlf_t(:,end);  %Estimate of loss of compressor
@@ -147,7 +149,8 @@ fprintf('Final Pulse Width %.2f ps\n', 2*comp_fit.c1);
 % comp_power_slam = 3E8./(lambda.^2).*comp_power_sf*1E-15;  %Frequency Spectrum in W/nm
 % comp_power_f = 10*log10(comp_power_slam*1E3); %Frequency Spectrum in dBm/nm
 % comp_phi_t = angle(comp_t); %Phase of time spectrum
-% comp_phi_f = angle(comp_f); %Phasse of frequency spectrum
+% comp_phi_f = angle(comp_f); %Phase of frequency spectrum
+% toc;
 % 
 % comp_fit = fit(t(fit_mask), comp_power_t(fit_mask, end), 'gauss1'); 
 % fprintf('Final Pulse Width %.2f ps\n', 2*comp_fit.c1);
