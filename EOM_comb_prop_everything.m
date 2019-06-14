@@ -38,7 +38,7 @@ save('pulse_globalvars.mat', ...
 
 
 %% First Step: EOM Comb and SMF
-z = 175;    % Total propogation distance, unit m
+z = 190;    % Total propogation distance, unit m
 betap = 1.0*[0, 0, -0.0217, 5.0308e-05];     % Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
 alpha = 0.18/1000/4.34;     % Loss coefficient, unit m-1. Leading number is loss in dB/km
 ave_power = 0.001;      % Avg Power, W
@@ -64,11 +64,11 @@ smf_fit = fit(t(fit_mask), smf_power_t(fit_mask, end), 'gauss1');   %Gaussian fi
 
 %% Second Step: EOM Through EDFA. Note, accounts for 2 stage EDFA
 
-z = [8 10];	%Lenght of fiber in each step. Basically a guess
+z = [8 10];	%Length of fiber in each step. Basically a guess
 betap = [0, 0, 0, 5.0308e-05; 0, 0, -0.0217, 5.0308e-05];	% Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
 alpha = 0.18/1000/4.34;	% Loss coefficient, unit m-1. Leading number is loss in dB/km
 %alpha = (-35/z)/1000/4.34;
-ave_power = [0.2, 2.5];	% Avg Power, W
+ave_power = [0.2, 4.0];	% Avg Power, W
 fwhm = 2*smf_fit.c1;	% Pulse width FWHM, ps. Inherited from SMF
 n2 = 2.5E-20;	% n2 of materialm m2/W
 Aeff = pi*((6.5/2)^2)*1E-6*1E-6;	% Effective Area of mode, m^2
@@ -112,7 +112,7 @@ hnlf_fit = fit(t(fit_mask), hnlf_power_t(fit_mask, end), 'gauss1'); %Fit of Inte
 
 %% Fourth Step: Single Mode Fiber
 
-z = 1.5;
+z = 1.0;
 alpha = 0.18/1000/4.34;  % Loss coefficient, unit m-1. Leading number is loss in dB/km
 betap = [0, 0, -0.0217, 5.0308e-05];  % Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
 gamma = 0.78*1E-3;  %Nonlinaer Coefficient of material Taken from https://ieeexplore.ieee.org/document/7764544
