@@ -1,4 +1,4 @@
-function w = wspace(t,nt);
+function w = wspace(t,nt)
 
 % This function constructs a linearly-spaced vector of angular
 % frequencies that correspond to the points in an FFT spectrum.
@@ -43,3 +43,4 @@ end
 w = 2*pi*(0:nt-1)'/t;
 kv = find(w >= pi/dt);
 w(kv) = w(kv) - 2*pi/dt;
+end
