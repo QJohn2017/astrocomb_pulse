@@ -19,7 +19,7 @@ addpath(fullfile(cur_dir, 'tools'));
 
 freq_m = 16E9;                  % Modulator drive freq in Hz
 T = 2.0 / freq_m * 1E12;        % Time window, unit ps, should be long enough for ~2 cycles
-nt = 2^17;                      % Number of points
+nt = 2^16;                      % Number of points
 dt = T / (nt-1);                % Timestep
 t = ((1:nt)' - (nt+1)/2) * dt;  % Time vector  
 w = wspace(T, nt);              % Angular frequency vector  
@@ -42,12 +42,12 @@ lambda_mask  = find(lambda > 0);  % find where the lambda > 0 for ploting
 %% Zeroth Step: EOM Comb
 
 % Avg Power, W
-ave_power = 0.001;
+avg_power = 0.001;
 % RF Power applied to Modulators
 P_PM = 25.5;
 P_IM = 7.5;
 % Pulse energy, pJ
-energy = ave_power / freq_m * 1E12;
+energy = avg_power / freq_m * 1E12;
 % Pulse width FWHM, ps. Defined as 50% of applied uWave rep rate
 fwhm = (1 / freq_m) * 1E12;
 % Peak power in W
@@ -66,167 +66,59 @@ u_ini = circshift(u_ini, min_idx);
 
 %% First Step: SMF
 
-% Total propogation distance, unit m
-z = 190;
-% Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
-betap = 1.0 * [0, 0, -0.0217, 5.0308e-05];
-% Loss coefficient, unit m-1. Leading number is loss in dB/km
-alpha = 0.18 / 1000 / 4.34;
-% Nonlinear coefficient of material taken from https://ieeexplore.ieee.org/document/7764544
-gamma = 0.78*1E-3;
+% Length of fiber, unit m
+z = 180;
 
-disp('Propagating through SMF')
-tic;
-[smf_t, smf_f, smf_power_f, smf_power_t, smf_phi_t, smf_phi_f] = ...
-    prop_pulse(u_ini, alpha, betap, gamma, energy, z);
-toc;
+[smf_t, smf_f, smf_power_t, smf_power_f, smf_phase_t, smf_phase_f, smf_fwhm] = ...
+    prop_smf(u_ini, avg_power, z);
 
-% Gaussian fit of intensity
-fit_mask = find((t > -5) & (t < 5));  % Only fit part of the waveform
-smf_fit = fit(t(fit_mask), smf_power_t(fit_mask, end), 'gauss1');
-fprintf('SMF Pulse Width %.2f ps\n', 2*smf_fit.c1); 
+fprintf('SMF Pulse Width %.2f ps\n', smf_fwhm);
 
 %% Second Step: EOM Through EDFA. Note, accounts for 2 stage EDFA
 
-% Length of fiber (m) in each step. Basically a guess
-z = [8 10];
-% Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
-betap = [0, 0, 0, 5.0308e-05;
-         0, 0, -0.0217, 5.0308e-05];
-% Loss coefficient, unit m-1. Leading number is loss in dB/km
-alpha = 0.18 / 1000 / 4.34;
-%alpha = (-35/z)/1000/4.34;
-% Avg Power, W
-ave_power = [0.2, 3.5];
-% Pulse width FWHM, ps. Inherited from SMF
-fwhm = 2*smf_fit.c1;
-% n2 of material m2/W
-n2 = 2.5E-20;
-% Effective Area of mode, m^2
-Aeff = pi*((6.5/2)^2)*1E-6*1E-6;
-% Nonlinear coefficient 1/(W m)
-gamma = (n2/Aeff) * (2*pi / (lambda0*1E-9));
+% Average power after EDFA second stage, W
+avg_power = 3.5;
 
-disp('Propagating through EDFA');
-tic;
-% Loop twice becuase of 2 stage edfa
-for i = 1:2     
-    % Pulse energy, pJ
-    energy = ave_power(i) / freq_m*1E12; 
-    % Peak power in J(?)
-    peak_power = (energy*1E-12) / (fwhm*1E-12);
-    
-    % Initialize pulse from previous pulse
-    if i == 1
-        u_ini = sqrt(peak_power) * smf_t(:, end);  
-    else
-        u_ini = sqrt(peak_power) * edfa_t(:, end);
-    end
-    
-    [edfa_t, edfa_f, edfa_power_f, edfa_power_t, edfa_phi_t, edfa_phi_f] = ...
-        prop_pulse(u_ini, alpha, betap(i, :), gamma, energy, z(i));
-end
-toc;
+[edfa_t, edfa_f, edfa_power_t, edfa_power_f, edfa_phase_t, edfa_phase_f, edfa_fwhm] = ...
+    prop_edfa(smf_t(:, end), avg_power, lambda0);
 
-% Fit of intensity pulse
-edfa_fit = fit(t(fit_mask), edfa_power_t(fit_mask, end), 'gauss1');
-fprintf('EDFA Pulse Width %.2f ps\n', 2*edfa_fit.c1); 
+fprintf('EDFA Pulse Width %.2f ps\n', edfa_fwhm);
 
 %% Third Step: EOM Through HNLF
 
 % Length of fiber, unit m
 z = 10;
-% Loss coefficient, unit m-1. Leading number is loss in dB/km
-alpha = 0.22 / 1000 / 4.34;
-% Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
-betap = [0, 0, 0.0023, -7.2317e-06];
-% Nonlinear coefficient 1/(W m)
-gamma = 10.6*1E-3;
 
-% Initial pulse from previous pulse
-u_ini = edfa_t(:, end);
-
-disp('Propagating through HNLF');
-tic;
-[hnlf_t, hnlf_f, hnlf_power_f, hnlf_power_t, hnlf_phi_t, hnlf_phi_f] = ...
-    prop_pulse(u_ini, alpha, betap, gamma, energy, z);
-toc;
-
-% Fit of Intenisty FWHM
-hnlf_fit = fit(t(fit_mask), hnlf_power_t(fit_mask, end), 'gauss1');
+[hnlf_t, hnlf_f, hnlf_power_t, hnlf_power_f, hnlf_phase_t, hnlf_phase_f, hnlf_fwhm] = ...
+    prop_hnlf(edfa_t(:, end), avg_power, z);
 
 %% Fourth Step: Pulse Compressor
 
 % Length of fiber, unit m
-z = 1.05;
-% Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m]
-betap = [0, 0, -0.0217, 5.0308e-05];
-% Loss coefficient, unit m-1. Leading number is loss in dB/km
-alpha = 0.18/1000/4.34;
-% Nonlinaer coefficient of material taken from https://ieeexplore.ieee.org/document/7764544
-gamma = 0.78*1E-3;	
-%energy = ave_power(2)/freq_m*1E12; % Pulse energy, pJ
-%peak_power = (energy*1E-12)/(2*hnlf_fit.c1*1E-12);   %Peak power in J(?)
+z = 1.0;
 
-% Initialize pulse from previous pulse
-u_ini = hnlf_t(:, end);
+[comp_t, comp_f, comp_power_t, comp_power_f, comp_phase_t, comp_phase_f, comp_fwhm] = ...
+    prop_smf(hnlf_t(:, end), avg_power, z);
 
-
-disp('Propagating through Compressor');
-tic;
-[comp_t, comp_f, comp_power_f, comp_power_t, comp_phi_t, comp_phi_f] = ...
-    prop_pulse(u_ini, alpha, betap, gamma, energy, z);
-toc;
-
-comp_t = comp_t(:, end); comp_f = comp_f(:, end);
-comp_power_f = comp_power_f(:, end); comp_power_t = comp_power_t(:, end);
-comp_phi_t = comp_phi_t(:, end); comp_phi_f = comp_phi_f(:, end);
-comp_fit = fit(t(fit_mask), comp_power_t(fit_mask, end), 'gauss1'); %Fit of Intenisty FWHM
-fprintf('Compressor Pulse Width %.2f ps\n', 2*comp_fit.c1);
+fprintf('Compressor Pulse Width %.2f ps\n', comp_fwhm);
+fprintf('Compressor Peak Power %.2f pJ\n', max(comp_power_t(:, end)));
 
 %% Fifth Step: Waveguide
 
 % Length of waveguide, unit m
-z = 20e-3;
-% Dispersion Beta Params as [0, 0, beta2, beta3] unit [0 0 ps2/m ps3/m] 
-betap = [0, 0, -4.38E-2, -2.41e-4, 3.16e-6];
-%betap = [0, 0, -0.0217, 5.0308e-05];
-% Loss coefficient, unit m-1. Leading number is loss in dB/km
-alpha = 0.1/1000/4.34;
-% n2 of materialm m2/W
-n2 = 3E-19;
-% Effective Area of mode, m^2
-Aeff = 1E-6*1E-6;
-% Nonlinearity coefficient 1/(W m)
-gamma = 2*pi*n2/Aeff/lambda0*1e9;
+z = 10e-3;
 
-% Loss after compressor, etc
-fiber_loss = .7;
-% Transmission from lens to waveguide
-trans = .2;    
+[wg_t, wg_f, wg_power_t, wg_power_f, wg_phase_t, wg_phase_f, wg_fwhm] = ...
+    prop_waveguide(comp_t(:, end), avg_power, z, lambda0);
 
-% Pulse energy, pJ
-energy = fiber_loss*sqrt(trans) * ave_power(2)/freq_m*1E12;
-% Peak power in J(?)
-peak_power = (energy*1E-12) / (2*comp_fit.c1*1E-12); 
+fprintf('Final Pulse Width %.2f ps\n', wg_fwhm);
 
-% Initialize pulse from previous pulse
-u_ini = comp_t(:, end); 
-
-disp('Propagating through Waveguide');
-tic;
-[wg_t, wg_f, wg_power_f, wg_power_t, wg_phi_t, wg_phi_f] = ...
-    prop_pulse(u_ini, alpha, betap, gamma, energy, z);
-toc;
-
-wg_t = wg_t(:, end); wg_f = wg_f(:, end);
-wg_power_f = wg_power_f(:, end); wg_power_t = wg_power_t(:, end);
-wg_phi_t = wg_phi_t(:, end); wg_phi_f = wg_phi_f(:, end);
-
-% Fit of Intenisty FWHM
-wg_fit = fit(t(fit_mask), wg_power_t(fit_mask, end), 'gauss1');
-fprintf('Final Pulse Width %.2f ps\n', 2*wg_fit.c1);
-
+% % Pulse energy, pJ
+% energy = fiber_loss * sqrt(trans) * avg_power / freq_m*1E12;
+% 
+% % Peak power in J(?)
+% peak_power = (energy*1E-12) / (comp_fwhm*1E-12); 
+% fprintf('Peak Power into Waveguide %.2f J\n', peak_power);
 
 %% Plot Everything
 xlim_lambda = [1400 1700];
@@ -237,12 +129,12 @@ set(gcf, 'position',scrsz);
 
 % Time Plot
 subplot(2, 1, 1)    
-    ax = plot(t, (abs(smf_power_t(:, 1)).^2)./max(abs(smf_power_t(:, 1)).^2), ...
-        t, smf_power_t(:, end)./max(smf_power_t(:, end)), ...
-        t, edfa_power_t(:, end)./max(edfa_power_t(:, end)), ...
-        t, hnlf_power_t(:, end)./max(hnlf_power_t(:, end)), ...
-        t, comp_power_t./max(comp_power_t), ...
-        t, wg_power_t./max(wg_power_t));
+    ax = plot(t, (abs(smf_power_t(:, 1)).^2) ./ max(abs(smf_power_t(:, 1)).^2), ...
+        t, smf_power_t(:, end) ./ max(smf_power_t(:, end)), ...
+        t, edfa_power_t(:, end) ./ max(edfa_power_t(:, end)), ...
+        t, hnlf_power_t(:, end) ./ max(hnlf_power_t(:, end)), ...
+        t, comp_power_t(:, end) ./ max(comp_power_t(:, end)), ...
+        t, wg_power_t(:, end) ./ max(wg_power_t(:, end)));
     xlabel('Time (ps)')
     ylabel('Norm Power')
     xlim([-3 3]); ylim([0 1.5]);
@@ -256,8 +148,8 @@ subplot(2, 1, 2)
         lambda, smf_power_f(:, end), ...
         lambda, edfa_power_f(:, end), ...
         lambda, hnlf_power_f(:, end), ...
-        lambda, comp_power_f, ...
-        lambda, wg_power_f);
+        lambda, comp_power_f(:, end), ...
+        lambda, wg_power_f(:, end));
     xlabel('Wavelength (nm)');
     ylabel('Power Density (dBm/nm)');
     xlim(xlim_lambda)
@@ -271,23 +163,23 @@ scrsz = get(groot,'ScreenSize');
 set(gcf, 'position',scrsz);
 
 subplot(6, 1, 1)
-    plot_yy(t, smf_power_t(:, 1), unwrap(smf_phi_t(:, 1) - smf_phi_t(ref_idx, 1)))
+    plot_yy(t, smf_power_t(:, 1), unwrap(smf_phase_t(:, 1) - smf_phase_t(ref_idx, 1)))
     title(sprintf('Initial EOM Comb, FWHM = %.1f ps', (1/(freq_m*2))*1E12)); xlim([-10 10])
 subplot(6, 1, 2)
-    plot_yy(t, smf_power_t(:, end), unwrap(smf_phi_t(:, end) - smf_phi_t(ref_idx, end)))
-    title(sprintf('After SMF, FWHM = %.1f ps', 2*smf_fit.c1)); xlim([-5 5])
+    plot_yy(t, smf_power_t(:, end), unwrap(smf_phase_t(:, end) - smf_phase_t(ref_idx, end)))
+    title(sprintf('After SMF, FWHM = %.1f ps', smf_fwhm)); xlim([-5 5])
 subplot(6, 1 , 3)
-    plot_yy(t, edfa_power_t(:, end), unwrap(edfa_phi_t(:, end) - edfa_phi_t(ref_idx, end)))
-    title(sprintf('After EDFA, FWHM = %.1f ps', 2*edfa_fit.c1)); xlim([-5 5])
+    plot_yy(t, edfa_power_t(:, end), unwrap(edfa_phase_t(:, end) - edfa_phase_t(ref_idx, end)))
+    title(sprintf('After EDFA, FWHM = %.1f ps', edfa_fwhm)); xlim([-5 5])
 subplot(6, 1, 4)
-    plot_yy(t, hnlf_power_t(:, end), unwrap(hnlf_phi_t(:, end) - hnlf_phi_t(ref_idx, end)));
-    title(sprintf('After HNLF, FWHM = %.1f ps', 2*hnlf_fit.c1)); xlim([-5 5])
+    plot_yy(t, hnlf_power_t(:, end), unwrap(hnlf_phase_t(:, end) - hnlf_phase_t(ref_idx, end)));
+    title(sprintf('After HNLF, FWHM = %.1f ps', hnlf_fwhm)); xlim([-5 5])
 subplot(6, 1, 5)
-    plot_yy(t, comp_power_t(:, end), unwrap(comp_phi_t(:, end) - comp_phi_t(ref_idx, end)));
-    title(sprintf('After Compressor, FWHM = %.2f ps', 2*comp_fit.c1)); xlim([-5 5])
+    plot_yy(t, comp_power_t(:, end), unwrap(comp_phase_t(:, end) - comp_phase_t(ref_idx, end)));
+    title(sprintf('After Compressor, FWHM = %.2f ps', comp_fwhm)); xlim([-5 5])
 subplot(6, 1, 6)
-    plot_yy(t, wg_power_t(:, end), unwrap(wg_phi_t(:, end) - wg_phi_t(ref_idx, end)));
-    title(sprintf('After Waveguide, FWHM = %.2f ps', 2*wg_fit.c1)); xlim([-5 5])
+    plot_yy(t, wg_power_t(:, end), unwrap(wg_phase_t(:, end) - wg_phase_t(ref_idx, end)));
+    title(sprintf('After Waveguide, FWHM = %.2f ps', wg_fwhm)); xlim([-5 5])
     
 %% Spectral Intensity and Phase
 %[~, ref_idx] = min(abs(lambda-lambda0));
@@ -297,23 +189,22 @@ scrsz = get(groot,'ScreenSize');
 set(gcf, 'position',scrsz);
 
 subplot(6, 1, 1)
-    plot_yy(lambda, smf_power_f(:, 1), unwrap(smf_phi_f(:, 1) - smf_phi_f(ref_idx, 1)))
+    plot_yy(lambda, smf_power_f(:, 1), unwrap(smf_phase_f(:, 1) - smf_phase_f(ref_idx, 1)))
     title('Initial EOM Comb'); xlim(xlim_lambda)
 subplot(6, 1, 2)
-    plot_yy(lambda, smf_power_f(:, end), unwrap(smf_phi_f(:, end)- smf_phi_f(ref_idx, end)))
+    plot_yy(lambda, smf_power_f(:, end), unwrap(smf_phase_f(:, end)- smf_phase_f(ref_idx, end)))
     title('After SMF'); xlim(xlim_lambda)
 subplot(6, 1 , 3)
-    plot_yy(lambda, edfa_power_f(:, end), unwrap(edfa_phi_f(:, end) - edfa_phi_f(ref_idx, end)))
+    plot_yy(lambda, edfa_power_f(:, end), unwrap(edfa_phase_f(:, end) - edfa_phase_f(ref_idx, end)))
     title('After EDFA'); xlim(xlim_lambda)
 subplot(6, 1, 4)
-    plot_yy(lambda, hnlf_power_f(:, end), unwrap(hnlf_phi_f(:, end) - hnlf_phi_f(ref_idx, end)));
+    plot_yy(lambda, hnlf_power_f(:, end), unwrap(hnlf_phase_f(:, end) - hnlf_phase_f(ref_idx, end)));
     title('After HNLF'); xlim(xlim_lambda)
 subplot(6, 1, 5)
-    plot_yy(lambda, comp_power_f(:, end), unwrap(comp_phi_f(:, end) - comp_phi_f(ref_idx, end)));
+    plot_yy(lambda, comp_power_f(:, end), unwrap(comp_phase_f(:, end) - comp_phase_f(ref_idx, end)));
     title('After Compressor'); xlim(xlim_lambda)    
 subplot(6, 1, 6)
-    %plot_yy(lambda, wg_power_f, unwrap(wg_phi_f(:, end) - wg_phi_f(ref_idx, end)));
-    plot(lambda, wg_power_f)
+    plot_yy(lambda, wg_power_f(:, end), unwrap(wg_phase_f(:, end) - wg_phase_f(ref_idx, end)));
     title('After Waveguide'); xlim([500 2000])
     
 %% Functions
