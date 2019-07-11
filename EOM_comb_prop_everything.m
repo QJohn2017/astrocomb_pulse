@@ -18,8 +18,9 @@ addpath(fullfile(cur_dir, 'tools'));
 %% Initialize Parameters
 
 freq_m = 16E9;                  % Modulator drive freq in Hz
-T = 2.0 / freq_m * 1E12;        % Time window, unit ps, should be long enough for ~2 cycles
-nt = 2^16;                      % Number of points
+n_pulses = 2;                   % Number of pulses in the time window
+T = n_pulses / freq_m * 1E12;   % Time window, unit ps
+nt = 2^18;                      % Number of points
 dt = T / (nt-1);                % Timestep
 t = ((1:nt)' - (nt+1)/2) * dt;  % Time vector  
 w = wspace(T, nt);              % Angular frequency vector  
@@ -35,81 +36,95 @@ n1 = round(nz/nplot);		    % Number of steps per plot
 
 % Save global Variables so they can be passed to the function
 save('pulse_globalvars.mat', ...
-    't', 'f', 'lambda', 'freq_m', 'nt', 'dt', 'n1', 'nplot', 'nz');    
+    'n_pulses', 't', 'f', 'lambda0', 'freq_m', 'nt', 'dt', 'n1', 'nplot', 'nz');    
 
 lambda_mask  = find(lambda > 0);  % find where the lambda > 0 for ploting
 
 %% Zeroth Step: EOM Comb
 
-% Avg Power, W
-avg_power = 0.001;
-% RF Power applied to Modulators
+% RF Power applied to Modulators, dBm
 P_PM = 25.5;
 P_IM = 7.5;
-% Pulse energy, pJ
-energy = avg_power / freq_m * 1E12;
-% Pulse width FWHM, ps. Defined as 50% of applied uWave rep rate
-fwhm = (1 / freq_m) * 1E12;
-% Peak power in W
-peak_power = (energy*1E-12) / (fwhm*1E-12);
+
+% Number of intensity and phase modulators
+N_IM = 1;
+N_PM = 2;
 
 % Initialize EOM Pulse
-u_ini = sqrt(peak_power) * EOM_pulse(t, freq_m*1E-12, P_IM, P_PM);
-
-% Index of center of pulse
-[~, min_idx] = max(u_ini);
-
-% Shift the waveform to the center of the time spectrum
-u_ini = circshift(u_ini, min_idx);  
-%u_ini = circshift(u_ini, length(t)/2);
-
+u_ini = EOM_pulse(t, freq_m*1E-12, P_IM, P_PM, N_IM, N_PM);
 
 %% First Step: SMF
 
-% Length of fiber, unit m
-z = 180;
+% Input average power, W
+avg_power = 0.001;
 
+% Length of fiber, m
+z = 200;
+
+disp('Propagating through SMF')
+tic;
 [smf_t, smf_f, smf_power_t, smf_power_f, smf_phase_t, smf_phase_f, smf_fwhm] = ...
     prop_smf(u_ini, avg_power, z);
-
+toc;
 fprintf('SMF Pulse Width %.2f ps\n', smf_fwhm);
 
 %% Second Step: EOM Through EDFA. Note, accounts for 2 stage EDFA
 
-% Average power after EDFA second stage, W
-avg_power = 3.5;
+% Average power in each EDFA stage, W
+avg_power = [0.08, 3.5];
 
+disp('Propagating through EDFA');
+tic;
 [edfa_t, edfa_f, edfa_power_t, edfa_power_f, edfa_phase_t, edfa_phase_f, edfa_fwhm] = ...
-    prop_edfa(smf_t(:, end), avg_power, lambda0);
+    prop_edfa(smf_t(:, end), avg_power);
+toc;
 
 fprintf('EDFA Pulse Width %.2f ps\n', edfa_fwhm);
 
 %% Third Step: EOM Through HNLF
 
-% Length of fiber, unit m
+% Length of fiber, m
 z = 10;
 
+% Use the average power from the EDFA second stage
+avg_power = avg_power(2);
+
+disp('Propagating through HNLF');
+tic;
 [hnlf_t, hnlf_f, hnlf_power_t, hnlf_power_f, hnlf_phase_t, hnlf_phase_f, hnlf_fwhm] = ...
     prop_hnlf(edfa_t(:, end), avg_power, z);
+toc;
 
 %% Fourth Step: Pulse Compressor
 
-% Length of fiber, unit m
-z = 1.0;
+% Length of fiber, m
+z = 1.1;
 
+disp('Propagating through Compressor');
+tic;
 [comp_t, comp_f, comp_power_t, comp_power_f, comp_phase_t, comp_phase_f, comp_fwhm] = ...
-    prop_smf(hnlf_t(:, end), avg_power, z);
+    prop_smf(hnlf_t(:, end), avg_power*.8, z);
+toc;
 
 fprintf('Compressor Pulse Width %.2f ps\n', comp_fwhm);
 fprintf('Compressor Peak Power %.2f pJ\n', max(comp_power_t(:, end)));
 
 %% Fifth Step: Waveguide
 
+% Loss after compressor, etc
+fiber_loss = .8;
+
+% Transmission from lens to waveguide
+trans = .8;
+
+% Apply losses to average power
+avg_power = fiber_loss * sqrt(trans) * avg_power;
+
 % Length of waveguide, unit m
 z = 10e-3;
 
 [wg_t, wg_f, wg_power_t, wg_power_f, wg_phase_t, wg_phase_f, wg_fwhm] = ...
-    prop_waveguide(comp_t(:, end), avg_power, z, lambda0);
+    prop_waveguide(comp_t(:, end), avg_power, z);
 
 fprintf('Final Pulse Width %.2f ps\n', wg_fwhm);
 
@@ -129,7 +144,7 @@ set(gcf, 'position',scrsz);
 
 % Time Plot
 subplot(2, 1, 1)    
-    ax = plot(t, (abs(smf_power_t(:, 1)).^2) ./ max(abs(smf_power_t(:, 1)).^2), ...
+    ax = plot(t, (smf_power_t(:, 1)) ./ max(smf_power_t(:, 1)), ...
         t, smf_power_t(:, end) ./ max(smf_power_t(:, end)), ...
         t, edfa_power_t(:, end) ./ max(edfa_power_t(:, end)), ...
         t, hnlf_power_t(:, end) ./ max(hnlf_power_t(:, end)), ...
