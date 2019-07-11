@@ -1,4 +1,4 @@
-function u1 = ssprop(u0,dt,dz,nz,alpha,betap,gamma,maxiter,tol);
+function u1 = ssprop(u0, dt, dz, nz, alpha, betap, gamma, maxiter, tol)
 
 % This function solves the nonlinear Schrodinger equation for
 % pulse propagation in an optical fiber using the split-step
@@ -61,32 +61,32 @@ function u1 = ssprop(u0,dt,dz,nz,alpha,betap,gamma,maxiter,tol);
 %   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
 %   02111-1307 USA
 
-if (nargin<9)
+if nargin < 9
   tol = 1e-5;
 end
-if (nargin<8)
+if nargin < 8
   maxiter = 4;
 end
 
 nt = length(u0);
-w = 2*pi*[(0:nt/2-1),(-nt/2:-1)]'/(dt*nt);
+w = 2*pi * [(0:nt/2-1), (-nt/2:-1)]' / (dt*nt);
 
-halfstep = -alpha/2;
-for ii = 0:length(betap)-1;
-  halfstep = halfstep - j*betap(ii+1)*(w).^ii/factorial(ii);
+halfstep = -alpha / 2;
+for ii = 0:length(betap)-1
+  halfstep = halfstep - 1i * betap(ii+1) * (w).^ii / factorial(ii);
 end
-halfstep = exp(halfstep*dz/2);
+halfstep = exp(halfstep * dz / 2);
 
 u1 = u0;
 ufft = fft(u0);
-for iz = 1:nz,
-  uhalf = ifft(halfstep.*ufft);
-  for ii = 1:maxiter,
-    uv = uhalf .* exp(-j*gamma*(abs(u1).^2 + abs(u0).^2)*dz/2);
+for iz = 1:nz
+  uhalf = ifft(halfstep .* ufft);
+  for ii = 1:maxiter
+    uv = uhalf .* exp(-1i * gamma * (abs(u1).^2 + abs(u0).^2) * dz / 2);
 	uv = fft(uv);
-    ufft = halfstep.*uv;
+    ufft = halfstep .* uv;
     uv = ifft(ufft);
-    if (norm(uv-u1,2)/norm(u1,2) < tol)
+    if norm(uv-u1, 2) / norm(u1, 2) < tol
       u1 = uv;
       break;
     else
@@ -94,8 +94,7 @@ for iz = 1:nz,
     end
   end
   if (ii == maxiter)
-    warning(sprintf('Failed to converge to %f in %d iterations',...
-        tol,maxiter));
+    warning(sprintf('Failed to converge to %f in %d iterations', tol, maxiter));
   end
   u0 = u1;
 end
