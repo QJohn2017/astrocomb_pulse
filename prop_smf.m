@@ -19,7 +19,7 @@ slope = .092; % ps/(nm^2 km)
 % Dispersion and dispersion slope at 1550 nm
 % http://mathscinotes.com/2012/04/optical-fiber-dispersion-formula-where-did-this-come-from/
 D = slope/4 * (lambda - lambda0^4/lambda^3); % ps/(nm km)
-d_D = slope/4 * (1 + 3 * lambda0^4/lambda^4); % ps/(nm^2 km)
+d_D = 0; %slope/4 * (1 + 3 * lambda0^4/lambda^4); % ps/(nm^2 km)
 
 % Dispersion Beta parameters, [1/m ps/m ps^2/m ps^3/m]
 [beta2, beta3] = D_to_beta(D, d_D);
