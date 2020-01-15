@@ -99,11 +99,14 @@ toc;
 
 % Length of fiber, m
 z = 1.1;
+    
+% Introduce some fiber losses
+avg_power = 0.8 * avg_power;
 
 disp('Propagating through Compressor');
 tic;
 [comp_t, comp_f, comp_power_t, comp_power_f, comp_phase_t, comp_phase_f, comp_fwhm] = ...
-    prop_smf(hnlf_t(:, end), avg_power*.8, z);
+    prop_smf(hnlf_t(:, end), avg_power, z);
 toc;
 
 fprintf('Compressor Pulse Width %.2f ps\n', comp_fwhm);
@@ -112,10 +115,10 @@ fprintf('Compressor Peak Power %.2f pJ\n', max(comp_power_t(:, end)));
 %% Fifth Step: Waveguide
 
 % Loss after compressor, etc
-fiber_loss = .8;
+fiber_loss = 1;
 
 % Transmission from lens to waveguide
-trans = .8;
+trans = 1;
 
 % Apply losses to average power
 avg_power = fiber_loss * sqrt(trans) * avg_power;
