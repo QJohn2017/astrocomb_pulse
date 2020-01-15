@@ -27,7 +27,7 @@ A_eff = pi * (mfd/2)^2; % m^2
 gamma = 2*pi / lambda * n2 / A_eff;
 
 % First stage parameters (from Pritel email and guesses)
-z = 5; % Fiber length, m
+z = 8; % Fiber length, m
 D = 0.0; % Dispersion, ps/(nm km)
 d_D = 0.0; % Dispersion slope, ps/(nm^2 km)
 [beta2, beta3] = D_to_beta(D, d_D);
@@ -37,7 +37,7 @@ betap = [0, 0, beta2, beta3]; % [1/m, ps/m, ps^2/m, ps^3/m]
 out_t = prop_pulse(pulse, alpha, betap, gamma, avg_power(1), z);
 
 % Second stage parameters (from Pritel email and guesses)
-z = 11; % Fiber length, m
+z = 10; % Fiber length, m
 D = 17.0; % Dispersion, ps/(nm km)
 d_D = 0.0; % Dispersion slope, ps/(nm^2 km)
 [beta2, beta3] = D_to_beta(D, d_D);
